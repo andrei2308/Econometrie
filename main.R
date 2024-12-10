@@ -2,6 +2,8 @@ install.packages("lmtest")
 install.packages("sandwich")
 install.packages("tseries")
 install.packages("olsrr")
+install.packages("car")
+library(car)
 library(olsrr)
 library(tseries)
 library(lmtest)
@@ -166,3 +168,141 @@ predictions <- predict(model, newdata = new_values, se.fit = TRUE, interval = "c
 predictions
 
 #am folsit un interval de incredere de 90%
+
+
+#regresia multipla
+#variabila dependenta : venitul total aproximat
+#variabilele independente : cantitatea vanduta, pretul per unitate, canalul de vanzare (dummy)
+
+# Creare variabilă dummy pentru Number of Cows
+dataset_2022$High_Number_Cows <- ifelse(dataset_2022$`Number.of.Cows` >= 68, 1, 0)
+
+# Construirea modelului de regresie multiplă folosind doar High_Number_Cows
+model_single_dummy <- lm(`Approx..Total.Revenue.INR.` ~ 
+                           `Quantity.Sold..liters.kg.` + 
+                           `Price.per.Unit..sold.` + 
+                           High_Number_Cows, data = dataset_2022)
+
+# Rezumatul modelului
+summary(model_single_dummy)
+
+#Cand toate variabilele sunt 0, venitul aproximativ este -13382.924
+#pentru fiecare litru/kg suplimentar vandut, venitul total creste in medie cu 55.885 (p<2e-16, semnificativ)
+#pentru fiecare unitate suplimentara in pret, venitul total creste, in medie cu 244.330 (p<2e-16,seminficativ)
+#venitul pentru fermele care au cel putin 68 de vaci este mai mic cu 901.317 mai mic decat pentru fermele cu numar de vaci mai mare de 68 (p=0.0168 semnificativ statistic)
+#R squared, modelul explica 84.76 % din variatia veniturilor totale aproximative
+#R ajustat = 84,71% indicand ca modelul este foarte bun
+#F-statistic are p < 2.2e-16 => modelul este semnificativ global
+
+#Forma functionala este liniara
+plot(fitted(model_single_dummy), resid(model_single_dummy),
+     main = "Reziduuri vs Valori ajustate",
+     xlab = "Valori ajustate", ylab = "Reziduuri")
+abline(h = 0, col = "red")
+
+#Variabilitatea in x este pozitiva
+summary(dataset_2022$`Quantity.Sold..liters.kg.`)
+summary(dataset_2022$`Price.per.Unit..sold.`)
+table(dataset_2022$High_Number_Cows)
+
+#Homoschedasticitatea erorilor aleatoare
+bptest(model_single_dummy)
+
+bptest(model_single_dummy, ~ fitted(model_single_dummy) + I(fitted(model_single_dummy)^2), data = dataset_2022)
+#avem heteroschedasticitate confirmata de ambele teste => aplicam metoda regresiilor cu erori robuste
+coeftest(model_single_dummy, vcov = vcovHC(model_single_dummy, type = "HC"))
+
+#Erorile nu sunt autocorelate 
+dwtest(model_single_dummy)
+# DW este aproximativ 2 => absenta autocorelarii in reziduuri, iar p-value >0.05 =>
+# acceptam ipoteza nula conform careia erorile nu sunt autocorelate
+
+#Necorelare intre regresor si erorile aleatoare
+cor.test(dataset_2022$`Quantity.Sold..liters.kg.`, resid(model_single_dummy))
+cor.test(dataset_2022$`Price.per.Unit..sold.`, resid(model_single_dummy))
+cor.test(dataset_2022$High_Number_Cows, resid(model_single_dummy))
+#p=1,iar coeficientii de corelatie sunt aproape 0, ceea ce confirma ipoteza
+#Erorile au distributie normala 
+jarque.bera.test(resid(model_single_dummy))
+
+#analiza grafica
+hist(resid(model_single_dummy), breaks = 30, main = "Histogramă a Reziduurilor")
+qqnorm(resid(model_single_dummy))
+qqline(resid(model_single_dummy), col = "red")
+
+#erorile nu au distributie normala => identificam valorile extreme si le eliminam
+cooks_distance <- cooks.distance(model_single_dummy)
+plot(cooks_distance, main = "Cook's Distance")
+abline(h = 4 / nrow(dataset_2022), col = "red")
+
+# Pragul pentru identificarea valorilor influente
+threshold <- 4 / nrow(dataset_2022)
+
+# Observații influente
+influential_points <- which(cooks_distance > threshold)
+
+# Eliminare observații influente din setul de date
+dataset_cleaned <- dataset_2022[-influential_points, ]
+
+# Reconstruirea modelului fără observațiile influente
+model_cleaned <- lm(`Approx..Total.Revenue.INR.` ~ 
+                      `Quantity.Sold..liters.kg.` + 
+                      `Price.per.Unit..sold.` + 
+                      High_Number_Cows, data = dataset_cleaned)
+
+# Rezumatul noului model
+summary(model_cleaned)
+
+# Testăm din nou normalitatea erorilor
+residuals_cleaned <- resid(model_cleaned)
+jb_test_cleaned <- jarque.bera.test(residuals_cleaned)
+jb_test_cleaned
+
+# Analizăm distribuția grafică a reziduurilor
+hist(residuals_cleaned, breaks = 30, main = "Histogramă a Reziduurilor (fără valori influente)", xlab = "Reziduuri")
+qqnorm(residuals_cleaned)
+qqline(residuals_cleaned, col = "red")
+#erorile tot nu sunt distribuite normal, problema de limitare a datelor
+
+#multicoliniaritate
+# Calculează VIF pentru fiecare variabilă independentă
+vif_values <- vif(model_cleaned)
+
+# Afișează VIF-urile
+print(vif_values)
+
+# toate valorile sunt apropiate de 1 => lipsa multicoliniaritatii
+# Împărțim setul de date în set de antrenare și set de testare
+set.seed(123)  # Pentru reproducibilitate
+train_indices <- sample(1:nrow(dataset_cleaned), 0.8 * nrow(dataset_cleaned))
+train_data <- dataset_cleaned[train_indices, ]
+test_data <- dataset_cleaned[-train_indices, ]
+
+# Construirea modelului pe setul de antrenare
+model_train <- lm(`Approx..Total.Revenue.INR.` ~ 
+                    `Quantity.Sold..liters.kg.` + 
+                    `Price.per.Unit..sold.` + 
+                    High_Number_Cows, data = train_data)
+
+# Prognoze pe setul de testare
+predictions <- predict(model_train, newdata = test_data)
+
+# Calcularea erorilor absolute
+errors <- abs(test_data$`Approx..Total.Revenue.INR.` - predictions)
+
+# Calculul MAPE
+mape <- mean(errors / test_data$`Approx..Total.Revenue.INR.`) * 100
+print(paste("MAPE:", round(mape, 2), "%"))
+
+# Crearea unui interval de încredere pentru noi valori
+new_values <- data.frame(
+  `Quantity.Sold..liters.kg.` = c(200, 250, 300),
+  `Price.per.Unit..sold.` = c(50, 55, 60),
+  High_Number_Cows = c(1, 0, 1)
+)
+
+# Prognoze pentru noile valori
+predictions_new <- predict(model_train, newdata = new_values, se.fit = TRUE, interval = "confidence", level = 0.90)
+
+# Afișarea prognozelor și a intervalelor de încredere
+predictions_new$fit
