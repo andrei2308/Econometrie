@@ -1,11 +1,11 @@
 {
     "id": "595B58E3",
-    "path": null,
-    "project_path": null,
+    "path": "~/Econometrie/main.R",
+    "project_path": "main.R",
     "type": "r_source",
-    "hash": "0",
+    "hash": "3986880189",
     "contents": "",
-    "dirty": true,
+    "dirty": false,
     "created": 1733851564259.0,
     "source_on_save": false,
     "relative_order": 1,
@@ -17,11 +17,11 @@
         "scrollLine": "121"
     },
     "folds": "",
-    "lastKnownWriteTime": 28147970124087399,
-    "encoding": "",
+    "lastKnownWriteTime": 1733860661,
+    "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1733860433500,
+    "last_content_update": 1733860661923,
     "read_only": false,
     "read_only_alternatives": []
 }
