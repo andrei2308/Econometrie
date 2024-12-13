@@ -115,8 +115,11 @@ process_farm_data <- function(farm_data,farm_size)
   print(summary_model)
   
   #eliminam variabilele nesemnificative statistic din modelul de regresie multipla
-  selected_vars <- c("Quantity.Sold..liters.kg.","Price.per.Unit..sold.","Minimum.Stock.Threshold..liters.kg.","Reorder.Quantity..liters.kg.")
-  data_refined <- data[, selected_vars]
+  cat("\nEliminam variabilele nesemnificative din modelul de regresie multipla:\n")
+  #Verificam care variabile au p-value > 0.05 si le eliminam
+  p_values <- summary_model$coefficients[, 4]
+  insignificant_vars <- rownames(summary_model$coefficients[p_values > 0.05, ])
+  data_refined <- data_significant[, -which(colnames(data_significant) %in% insignificant_vars)]
   
   # Model de regresie multipla cu variabile semnificative
   final_data <- data.frame(data_refined, Revenue = y)
@@ -134,7 +137,7 @@ process_farm_data <- function(farm_data,farm_size)
   #Verificam daca modelul de regresie multipla este liniar
   #H0: Modelul este liniar
   #H1: Modelul nu este liniar
-  linear_hypothesis <- linearHypothesis(model, c("Quantity.Sold..liters.kg.","Price.per.Unit..sold.","Minimum.Stock.Threshold..liters.kg.","Reorder.Quantity..liters.kg."))
+  linear_hypothesis <- linearHypothesis(model, data = data, hypothesis.matrix = NULL, hypothesis = "linear")
   cat("\nTestul de liniaritate a functiei:\n")
   print(linear_hypothesis)
 
