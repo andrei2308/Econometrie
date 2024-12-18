@@ -144,7 +144,7 @@ Econometrie/
 For questions or feedback, feel free to reach out:
 
 - **Author**: Andrei  
-- **Email**: [your-email@example.com]  
+- **Email**: [chitoiu.andrei2@yahoo.com]  
 - **GitHub**: [andrei2308](https://github.com/andrei2308)
 
 ---
