@@ -357,9 +357,21 @@ process_farm_data <- function(farm_data,farm_size)
   cat("----------------------------------END----------------------------------\n")
 }
 
-model_small <- process_farm_data(small_farms, "Small")
-model_medium <- process_farm_data(medium_farms, "Medium")
-model_large <- process_farm_data(large_farms, "Large")
+result_small <- process_farm_data(small_farms, "Small")
+result_medium <- process_farm_data(medium_farms, "Medium")
+result_large <- process_farm_data(large_farms, "Large")
+
+model_small <- result_small$model
+data_small <- result_small$data
+residuals_small <- result_small$residuals
+
+model_medium <- result_medium$model
+data_medium <- result_medium$data
+residuals_medium <- result_medium$residuals
+
+model_large <- result_large$model
+data_large <- result_large$data
+residuals_large <- result_large$residuals
 
 enchance_multiple_linear_model <- function(model)
 {
@@ -449,7 +461,12 @@ compare_farms_models <- function(model_small, model_medium, model_large, data_sm
   cat("\n================================= SFÂRȘIT ANALIZĂ =================================\n")
 }
 
+compare_farms_models(model_small, model_medium, model_large, data_small, data_medium, data_large)
 
-
-
-
+#Concluzii comparare modele
+#1. Modelul pentru fermele mari are cel mai mic RMSE, ceea ce înseamnă că prezice cel mai bine veniturile.
+#2. Variabile aditionale: Ferme medii: Total Land Area Acres(seminficatie marginala p=0.056) si Ferme mari : Minimum Stock Threshold liters per kg (marginal semnificativ p=0.063)
+# Variabilele Quantity sold si Price per unit sunt predictori puternici si stabili in toate cele 3 modele, dar exista variatii suplimentare pentru fermele medii si mari.
+#3. Testul ANOVA arata ca nu exista diferente semnificative intre reziduurile modelelor pentru fermele mici, medii si mari => modelele reprezinta un comportament similar in privinta erorilor.
+#4. Testele t-test pentru perechi arata ca nu exista diferente semnificative intre mediile reziduurilor modelelor pentru fermele mici, medii si mari ceea ce confrma stabilitatea modelelor pentru toate tipurile de ferme.
+#5. Vizualizarea grafica a reziduurilor arata ca acestea sunt distribuite aproximativ normal pentru toate tipurile de ferme.
