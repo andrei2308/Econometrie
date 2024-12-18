@@ -16,6 +16,7 @@ library(MASS)
 library(sandwich)
 library(tseries)
 library(car)
+library(olsrr)
 # Incarcarea datelor
 dataset <- read.csv("Cleaned_Dairy_Dataset.csv", header = TRUE, sep = ",")
 str(dataset)
@@ -28,9 +29,13 @@ large_farms <- subset(dataset, Farm.Size == "Large")
 str(dataset)
 process_farm_data <- function(farm_data,farm_size)
 {
+  cat("----------------------------------START----------------------------------\n")
   # Selectarea variabilelor numerice
-  numerical_columns <- c("Total.Land.Area..acres.","Number.of.Cows","Quantity..liters.kg.","Price.per.Unit","Quantity.Sold..liters.kg.",
-                         "Price.per.Unit..sold.","Approx..Total.Revenue.INR.","Quantity.in.Stock..liters.kg.","Minimum.Stock.Threshold..liters.kg.","Reorder.Quantity..liters.kg.")
+  # Selectarea variabilelor numerice
+  numerical_columns <- c("Total.Land.Area..acres.", "Number.of.Cows", "Quantity..liters.kg.", 
+                         "Price.per.Unit", "Quantity.Sold..liters.kg.", "Price.per.Unit..sold.", 
+                         "Approx..Total.Revenue.INR.", "Quantity.in.Stock..liters.kg.", 
+                         "Minimum.Stock.Threshold..liters.kg.", "Reorder.Quantity..liters.kg.")
   
   data <- farm_data[, numerical_columns]
   
@@ -41,8 +46,8 @@ process_farm_data <- function(farm_data,farm_size)
   X <- as.matrix(data[, !colnames(data) %in% "Approx..Total.Revenue.INR."])
   y <- as.vector(data$Approx..Total.Revenue.INR.)
   
-  # Standardizarea datelor
-  X_scaled <- scale(X)
+  # Standardizarea datelor (scalare)
+  X_scaled <- scale(X)  # Scalare setului de antrenament
   
   # Impartirea datelor in seturi de antrenament si test
   set.seed(42)
@@ -87,6 +92,7 @@ process_farm_data <- function(farm_data,farm_size)
   significant_vars <- rownames(as.matrix(lasso_coefs))[as.matrix(lasso_coefs) != 0 & rownames(as.matrix(lasso_coefs)) != "(Intercept)"]
   cat("Variabile semnificative selectate de Lasso:\n")
   print(significant_vars)
+  
   # Crearea unui nou set de date cu variabilele semnificative
   data_significant <- data[, significant_vars]
   X_significant <- as.matrix(data_significant)
@@ -104,7 +110,6 @@ process_farm_data <- function(farm_data,farm_size)
   lasso_rmse_refined <- sqrt(mean((lasso_pred_refined - y_test)^2))
   
   cat("Lasso RMSE cu variabilele semnificative:", lasso_rmse_refined, "\n")
-  #observam ca modelul s-a imbunatatit in urma eliminarii variabilelor nesemnificative
   
   # Model de regresie multipla folosind variabilele semnificative
   final_data <- data.frame(data_significant, Revenue = y)
@@ -114,12 +119,18 @@ process_farm_data <- function(farm_data,farm_size)
   cat("\nRezumatul modelului de regresie multipla:\n")
   print(summary_model)
   
-  #eliminam variabilele nesemnificative statistic din modelul de regresie multipla
-  cat("\nEliminam variabilele nesemnificative din modelul de regresie multipla:\n")
-  #Verificam care variabile au p-value > 0.05 si le eliminam
+  # Identificarea variabilelor semnificative din modelul de regresie multipla (p < 0.05)
   p_values <- summary_model$coefficients[, 4]
+  significant_vars_model <- rownames(summary_model$coefficients[p_values < 0.1, ])
+  cat("Variabile semnificative în modelul de regresie multipla:\n")
+  print(significant_vars_model)
+  
+  # Salvează numele variabilelor semnificative într-o variabilă separată
+  significant_vars_names <- significant_vars_model
+  
+  # Eliminarea variabilelor nesemnificative din modelul de regresie multipla
   insignificant_vars <- rownames(summary_model$coefficients[p_values > 0.05, ])
-  data_refined <- data_significant[, -which(colnames(data_significant) %in% insignificant_vars)]
+  data_refined <- data_significant[, which(colnames(data_significant) %in% significant_vars_model)]
   
   # Model de regresie multipla cu variabile semnificative
   final_data <- data.frame(data_refined, Revenue = y)
@@ -137,7 +148,7 @@ process_farm_data <- function(farm_data,farm_size)
   #Verificam daca modelul de regresie multipla este liniar
   #H0: Modelul este liniar
   #H1: Modelul nu este liniar
-  linear_hypothesis <- linearHypothesis(model, data = data, hypothesis.matrix = NULL, hypothesis = "linear")
+  linear_hypothesis <- ols_test_normality(model)
   cat("\nTestul de liniaritate a functiei:\n")
   print(linear_hypothesis)
 
@@ -173,41 +184,62 @@ process_farm_data <- function(farm_data,farm_size)
   }
   #=================================================IPOTEZA 4========================================
   # Testarea ipotezei 4: Homoscedasticitatea erorilor
-  #H0: Erorile sunt homoscedastice
-  #H1: Erorile nu sunt homoscedastice
-  #Testul Breusch-Pagan
+  # H0: Erorile sunt homoscedastice
+  # H1: Erorile nu sunt homoscedastice
+  # Testul Breusch-Pagan
   cat("\nTestul de omoscedasticitate a erorilor:\n")
   homoscedasticity_test <- bptest(model)
   print(homoscedasticity_test)
   
-  #Testul White
+  # Testul White
   cat("\nTestul de omoscedasticitate a erorilor (White):\n")
   white_test <- bptest(model, studentize = TRUE)
   print(white_test)
   
+  # Vizualizare reziduuri
+  cat("\nVizualizare reziduuri:\n")
+  residuals_model <- residuals(model)
+  
+  # Graficul reziduurilor vs valorile ajustate
+  plot(fitted(model), residuals_model, main = "Reziduuri vs Valori Ajustate",
+       xlab = "Valori Ajustate", ylab = "Reziduuri")
+  abline(h = 0, col = "red")
+  
+  # Histogramă a reziduurilor
+  hist(residuals_model, main = "Distribuția Reziduurilor", xlab = "Reziduuri", col = "lightblue", border = "black")
+  
+  cat("\nReziduuri - Sumariu:\n")
+  summary(residuals_model)
+  
+  # Aplicăm WLS doar dacă ipoteza nulă a fost respinsă
   if (homoscedasticity_test$p.value < 0.05) {
     cat("Ipoteza nulă a fost respinsă: Erorile nu sunt homoscedastice.\n")
     
-    #Aplicam WLS
-    cat("\nAplicam WLS:\n")
-    wls_model <- lm(Revenue ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. + Minimum.Stock.Threshold..liters.kg. + Reorder.Quantity..liters.kg., data = final_data, weights = 1 / fitted(model)^2)
+    # Aplicăm WLS folosind ponderi standard
+    cat("\nAplicam WLS folosind ponderi standard:\n")
+    
+    # Aplicăm WLS folosind ponderi bazate pe o variabilă semnificativă
+    # Ponderi standard (de exemplu, folosind variabila "Quantity.Sold..liters.kg.")
+    wls_model <- lm(Revenue ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold., data = final_data, weights = 1 / fitted(model)^2)
+    
     summary_wls_model <- summary(wls_model)
     print(summary_wls_model)
     
-    #Testam din nou homoscedasticitatea
+    # Testăm din nou omoscedasticitatea după aplicarea WLS
     cat("\nTestul de omoscedasticitate a erorilor (White) dupa aplicarea WLS:\n")
     white_test_wls <- bptest(wls_model, studentize = TRUE)
     print(white_test_wls)
     
-    #Testul Breusch-Pagan
+    # Testul Breusch-Pagan
     cat("\nTestul de omoscedasticitate a erorilor (Breusch-Pagan) dupa aplicarea WLS:\n")
     homoscedasticity_test_wls <- bptest(wls_model)
     print(homoscedasticity_test_wls)
     
-    
   } else {
     cat("Ipoteza nulă nu a fost respinsă: Erorile sunt homoscedastice.\n")
   }
+  
+  
   
   #=================================================IPOTEZA 5========================================
   # Testarea ipotezei 5: Erorile nu sunt autocorelate
@@ -234,7 +266,7 @@ process_farm_data <- function(farm_data,farm_size)
     
     #Aplicam GLS
     cat("\nAplicam GLS:\n")
-    gls_model <- gls(Revenue ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. + Minimum.Stock.Threshold..liters.kg. + Reorder.Quantity..liters.kg., data = final_data, correlation = corAR1())
+    gls_model <- gls(Revenue ~ ., data = final_data, correlation = corAR1())
     summary_gls_model <- summary(gls_model)
     print(summary_gls_model)
     
@@ -263,7 +295,7 @@ process_farm_data <- function(farm_data,farm_size)
     
     #Reantrenam modelul
     final_data_cleaned <- data.frame(data_cleaned, Revenue = y[!influential_points])
-    model_cleaned <- lm(Revenue ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. + Minimum.Stock.Threshold..liters.kg. + Reorder.Quantity..liters.kg., data = final_data_cleaned)
+    model_cleaned <- lm(Revenue ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold., data = final_data_cleaned)
     summary_model_cleaned <- summary(model_cleaned)
     print(summary_model_cleaned)
     
@@ -317,7 +349,12 @@ process_farm_data <- function(farm_data,farm_size)
     cat("Ipoteza nulă nu a fost respinsă: Nu exista multicoliniaritate.\n")
   
   }
-  return (model)
+  return(list(
+    model = model,
+    data = final_data,
+    residuals = residuals_model
+  ))
+  cat("----------------------------------END----------------------------------\n")
 }
 
 model_small <- process_farm_data(small_farms, "Small")
@@ -335,6 +372,82 @@ enchance_multiple_linear_model(model_small)
 enchance_multiple_linear_model(model_medium)
 enchance_multiple_linear_model(model_large)
 
+compare_farms_models <- function(model_small, model_medium, model_large, data_small, data_medium, data_large) {
+  cat("================================= ANALIZA COMPARATIVĂ =================================\n")
+  
+  # 1. Performanța modelelor
+  cat("\n1. Compararea performanței modelelor (RMSE):\n")
+  
+  # Calcularea RMSE pentru fiecare model
+  calc_rmse <- function(model, data) {
+    pred <- predict(model, data)
+    actual <- data$Revenue
+    sqrt(mean((pred - actual)^2))
+  }
+  
+  rmse_small <- calc_rmse(model_small, data_small)
+  rmse_medium <- calc_rmse(model_medium, data_medium)
+  rmse_large <- calc_rmse(model_large, data_large)
+  
+  cat("RMSE pentru ferme mici:", rmse_small, "\n")
+  cat("RMSE pentru ferme medii:", rmse_medium, "\n")
+  cat("RMSE pentru ferme mari:", rmse_large, "\n")
+  
+  # 2. Compararea coeficienților semnificativi
+  cat("\n2. Compararea coeficienților semnificativi din modele:\n")
+  print("Ferme mici:")
+  print(summary(model_small)$coefficients)
+  
+  print("Ferme medii:")
+  print(summary(model_medium)$coefficients)
+  
+  print("Ferme mari:")
+  print(summary(model_large)$coefficients)
+  
+  # 3. Testarea diferențelor între modelele reziduurilor folosind ANOVA
+  cat("\n3. Testarea diferențelor între modele folosind ANOVA:\n")
+  
+  # Combinația datelor și reziduurilor pentru ANOVA
+  data_small$residuals <- residuals(model_small)
+  data_medium$residuals <- residuals(model_medium)
+  data_large$residuals <- residuals(model_large)
+  
+  combined_data <- data.frame(
+    Residuals = c(data_small$residuals, data_medium$residuals, data_large$residuals),
+    Farm_Type = rep(c("Small", "Medium", "Large"), 
+                    times = c(nrow(data_small), nrow(data_medium), nrow(data_large)))
+  )
+  
+  anova_test <- aov(Residuals ~ Farm_Type, data = combined_data)
+  print(summary(anova_test))
+  
+  # 4. Testarea diferențelor dintre medii folosind t-test pentru perechi
+  cat("\n4. Testarea diferențelor dintre medii (t-test perechi):\n")
+  t_test_small_medium <- t.test(data_small$residuals, data_medium$residuals)
+  t_test_medium_large <- t.test(data_medium$residuals, data_large$residuals)
+  t_test_small_large <- t.test(data_small$residuals, data_large$residuals)
+  
+  cat("T-test între ferme mici și medii:\n")
+  print(t_test_small_medium)
+  
+  cat("T-test între ferme medii și mari:\n")
+  print(t_test_medium_large)
+  
+  cat("T-test între ferme mici și mari:\n")
+  print(t_test_small_large)
+  
+  # 5. Vizualizări grafice
+  cat("\n5. Vizualizări grafice pentru reziduuri:\n")
+  par(mfrow = c(1, 3)) # Setăm layout pentru 3 grafice
+  
+  hist(data_small$residuals, main = "Ferme Mici", xlab = "Reziduuri", col = "lightblue", border = "black")
+  hist(data_medium$residuals, main = "Ferme Medii", xlab = "Reziduuri", col = "lightgreen", border = "black")
+  hist(data_large$residuals, main = "Ferme Mari", xlab = "Reziduuri", col = "lightcoral", border = "black")
+  
+  par(mfrow = c(1, 1)) # Resetăm layout
+  
+  cat("\n================================= SFÂRȘIT ANALIZĂ =================================\n")
+}
 
 
 
