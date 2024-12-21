@@ -1,7 +1,3 @@
-Here is a **README.md** file tailored for your repository **Econometrie**. It provides structure and clarity for users who visit your repository and explains its purpose, functionality, and how to use it.
-
----
-
 ## **README.md**
 
 # 📊 Econometrie
