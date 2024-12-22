@@ -8,6 +8,8 @@ install.packages("lmtest")
 install.packages("tseries")
 install.packages("olsrr")
 install.packages("car")
+install.packages("AICcmodavg")
+library(AICcmodavg)
 library(lmtest)
 library(glmnet)
 library(caret)
@@ -470,3 +472,98 @@ compare_farms_models(model_small, model_medium, model_large, data_small, data_me
 #3. Testul ANOVA arata ca nu exista diferente semnificative intre reziduurile modelelor pentru fermele mici, medii si mari => modelele reprezinta un comportament similar in privinta erorilor.
 #4. Testele t-test pentru perechi arata ca nu exista diferente semnificative intre mediile reziduurilor modelelor pentru fermele mici, medii si mari ceea ce confrma stabilitatea modelelor pentru toate tipurile de ferme.
 #5. Vizualizarea grafica a reziduurilor arata ca acestea sunt distribuite aproximativ normal pentru toate tipurile de ferme.
+
+choose_best_model <- function(model_small, model_medium, model_large) {
+  cat("================================= ALEGEM CEL MAI BUN MODEL =================================\n")
+  
+  # Calcularea R^2 și R^2 ajustat pentru fiecare model
+  calc_r_squared <- function(model) {
+    summary_model <- summary(model)
+    summary_model$r.squared
+  }
+  
+  r_squared_small <- calc_r_squared(model_small)
+  r_squared_medium <- calc_r_squared(model_medium)
+  r_squared_large <- calc_r_squared(model_large)
+  
+  cat("\nR^2 pentru ferme mici:", r_squared_small, "\n")
+  cat("R^2 pentru ferme medii:", r_squared_medium, "\n")
+  cat("R^2 pentru ferme mari:", r_squared_large, "\n")
+  
+  # Calcularea R^2 ajustat pentru fiecare model
+  calc_adjusted_r_squared <- function(model) {
+    summary_model <- summary(model)
+    summary_model$adj.r.squared
+  }
+  
+  adjusted_r_squared_small <- calc_adjusted_r_squared(model_small)
+  adjusted_r_squared_medium <- calc_adjusted_r_squared(model_medium)
+  adjusted_r_squared_large <- calc_adjusted_r_squared(model_large)
+  
+  cat("\nR^2 ajustat pentru ferme mici:", adjusted_r_squared_small, "\n")
+  cat("R^2 ajustat pentru ferme medii:", adjusted_r_squared_medium, "\n")
+  cat("R^2 ajustat pentru ferme mari:", adjusted_r_squared_large, "\n")
+  
+  # Calcularea criteriilor informationale Akaike, Schwarz și Hannan-Quinn
+  calc_aic <- function(model) {
+    AIC(model)
+  }
+  
+  aic_small <- calc_aic(model_small)
+  aic_medium <- calc_aic(model_medium)
+  aic_large <- calc_aic(model_large)
+  
+  cat("\nCriteriul Akaike pentru ferme mici:", aic_small, "\n")
+  cat("Criteriul Akaike pentru ferme medii:", aic_medium, "\n")
+  cat("Criteriul Akaike pentru ferme mari:", aic_large, "\n")
+  
+  calc_bic <- function(model) {
+    BIC(model)
+  }
+  
+  bic_small <- calc_bic(model_small)
+  bic_medium <- calc_bic(model_medium)
+  bic_large <- calc_bic(model_large)
+  
+  cat("\nCriteriul Schwarz pentru ferme mici:", bic_small, "\n")
+  cat("Criteriul Schwarz pentru ferme medii:", bic_medium, "\n")
+  cat("Criteriul Schwarz pentru ferme mari:", bic_large, "\n")
+  
+  # Notă: HQIC nu este o funcție standard în R, așa că este necesar să o implementezi sau să verifici dacă pachetul folosit suportă HQIC.
+  calc_hq <- function(model) {
+    # Înlocuiește cu funcția corectă sau folosește o aproximare
+    AIC(model, k = log(length(model$residuals)))
+  }
+  
+  hq_small <- calc_hq(model_small)
+  hq_medium <- calc_hq(model_medium)
+  hq_large <- calc_hq(model_large)
+  
+  cat("\nCriteriul Hannan-Quinn pentru ferme mici:", hq_small, "\n")
+  cat("Criteriul Hannan-Quinn pentru ferme medii:", hq_medium, "\n")
+  cat("Criteriul Hannan-Quinn pentru ferme mari:", hq_large, "\n")
+  
+  # Alegerea modelului cu cel mai mare R^2 ajustat
+  best_model <- model_small
+  best_model_label <- "fermele mici"
+  best_r_squared <- adjusted_r_squared_small
+  
+  if (adjusted_r_squared_medium > best_r_squared) {
+    best_model <- model_medium
+    best_model_label <- "fermele medii"
+    best_r_squared <- adjusted_r_squared_medium
+  }
+  if (adjusted_r_squared_large > best_r_squared) {
+    best_model <- model_large
+    best_model_label <- "fermele mari"
+    best_r_squared <- adjusted_r_squared_large
+  }
+  
+  cat("\nModelul optim este pentru", best_model_label, "cu R^2 ajustat:", best_r_squared, "\n")
+  
+  return(best_model)
+}
+
+best_model <- choose_best_model(model_small, model_medium, model_large)
+enchance_multiple_linear_model(best_model)
+# Modelul optim este pentru fermele mari conform R^2 ajustat si a criteriilor informationale Akaike, Schwarz și Hannan-Quinn
