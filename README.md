@@ -149,5 +149,3 @@ For questions or feedback, feel free to reach out:
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
-
-Let me know if you need any adjustments or additions to the README! 😊
