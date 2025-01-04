@@ -589,6 +589,51 @@ enchance_multiple_linear_model(best_model)
 
 
 #La modelul optim adaugam variabile dummy si termeni de interactiune pentru a analiza comportamentul modelului
-#Adaugam variabile dummy pentru Location si Sales Channel
-#Adaugam termeni de interactiune pentru Quantity.Sold..liters.kg. si Price.per.Unit..sold.
+#Adaugam variabile dummy
+#Adaugam termeni de interactiune
+
+# Model fără termeni de interacțiune
+
+# Model cu termeni de interacțiune
+model_with_interaction <- lm(Revenue ~ Price.per.Unit..sold. * Minimum.Stock.Threshold..liters.kg., data = data_large)
+
+# Rezumatul modelului
+summary(model_with_interaction)
+ggplot(data_large, aes(x = Price.per.Unit..sold., y = Revenue, color = Minimum.Stock.Threshold..liters.kg.)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Interacțiunea dintre Preț și Pragul Minim de Stoc",
+       x = "Price per Unit Sold",
+       y = "Revenue")
+#Dupa adaugarea termenului de interactiune, coeficientul pentru termenul de interactiune este semnificativ (p < 0.05),
+#Acest lucru sugerează că efectul Price.per.Unit.sold asupra veniturilor variază 
+#în funcție de nivelul lui Minimum.Stock.Threshold.liters.kg..
+#Totuși, semnificația slabă și coeficientul scăzut (1.006) indică o interacțiune slabă.
+
+#Realizam predictii pentru modelul optim gasit
+# Crearea unui nou set de date pentru predicție
+new_data <- data.frame(
+  Quantity.Sold..liters.kg. = c(500, 600, 700),  # Cantitatea vândută
+  Price.per.Unit..sold. = c(50, 55, 60),          # Preț per unitate
+  Minimum.Stock.Threshold..liters.kg. = c(70, 80, 90)  # Prag minim de stoc
+)
+
+# Utilizarea modelului optim pentru predicții
+predicted_revenue <- predict(best_model, newdata = new_data)
+
+# Afișarea predicțiilor
+print(data.frame(new_data, Predicted_Revenue = predicted_revenue))
+
+#    Rezultatele Predicției (Predicted Revenue):
+#Pentru o cantitate vândută de 500 la un preț de 50, venitul estimat este de 26,677.06.
+#Pentru o cantitate vândută de 600 la un preț de 55, venitul estimat este de 33,563.95.
+#Pentru o cantitate vândută de 700 la un preț de 60, venitul estimat este de 40,450.83.
+
+#Observații:
+  
+#  Tendința pozitivă:
+#  Veniturile estimate cresc odată cu creșterea cantității vândute și a prețului per unitate, ceea ce este logic și în concordanță cu modelul.
+# Influența pragului minim de stoc:
+#  Pragul minim de stoc are o influență relativ mai redusă asupra veniturilor (datorită coeficientului mai mic), dar este totuși inclus în estimare.
+
 
