@@ -9,6 +9,11 @@ install.packages("tseries")
 install.packages("olsrr")
 install.packages("car")
 install.packages("AICcmodavg")
+install.packages("plm")
+install.packages("gplots")
+library(gplots)
+library(ggplot2)
+library(plm)
 library(AICcmodavg)
 library(lmtest)
 library(glmnet)
@@ -19,6 +24,7 @@ library(sandwich)
 library(tseries)
 library(car)
 library(olsrr)
+library(dplyr)
 # Incarcarea datelor
 dataset <- read.csv("Cleaned_Dairy_Dataset.csv", header = TRUE, sep = ",")
 str(dataset)
@@ -636,4 +642,99 @@ print(data.frame(new_data, Predicted_Revenue = predicted_revenue))
 # Influența pragului minim de stoc:
 #  Pragul minim de stoc are o influență relativ mai redusă asupra veniturilor (datorită coeficientului mai mic), dar este totuși inclus în estimare.
 
+#Aplicatia 2
+dataset2 <- read.csv("aplicatia2_set.csv", header = TRUE, sep = ",")
 
+# Verifică structura dataset-ului
+str(dataset2)
+
+# Selectează doar fermele de tip "Large"
+large_farms <- subset(dataset2, Farm.Size == "Large")
+
+# Convertirea datei într-un format corespunzător
+large_farms$Date <- as.Date(large_farms$Date, format = "%m/%d/%Y")
+large_farms$Year <- format(large_farms$Date, "%Y")
+# Selectează datele pentru anii doriți (de exemplu, 2019-2021)
+years_of_interest <- c("2019", "2020", "2021")
+filtered_data <- large_farms %>% filter(format(Date, "%Y") %in% years_of_interest)
+# Verifică structura datelor filtrate
+str(filtered_data)
+
+# Dacă "Location" este unică, o putem folosi ca ID
+if (anyDuplicated(large_farms$Location) == 0) {
+  large_farms$ID <- large_farms$Location
+} else {
+  # Creăm un ID unic pentru fiecare rând
+  large_farms$ID <- seq_len(nrow(large_farms))
+}
+
+# Confirmăm unicitatea coloanei ID
+length(unique(large_farms$ID)) == nrow(large_farms)
+# Declarare panel cu ID-ul corect
+pdata <- pdata.frame(large_farms, index = c("Location", "Year"))
+str(pdata)
+
+dev.off()
+coplot(Approx..Total.Revenue.INR. ~ Location|Year, type="l", data=pdata) 
+#Heterogenitatea
+plotmeans(Approx..Total.Revenue.INR. ~ Location, main = 'Heterogeneitate in randul locatiilor', data = pdata)
+plotmeans(Approx..Total.Revenue.INR. ~ Year, main = 'Tendinta veniturilor in timp', data = pdata)
+#Model de regresie multipla
+ols1_model <- lm(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold., data = pdata)
+summary(ols1_model)
+yhat <- ols_model$fitted
+ggplot(pdata, aes(x =Approx..Total.Revenue.INR., y =  Quantity.Sold..liters.kg. )) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw()
+
+#Efecte fixe
+# Model cu efecte fixe pentru ID-uri
+fixed_effects_model <- plm(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. + Quantity.in.Stock..liters.kg. + Minimum.Stock.Threshold..liters.kg., data = pdata, index = c("Location", "Year"), model = "within")
+summary(fixed_effects_model)
+# eliminam variabilele nesemnificative
+fixed_effects_model_refined <- plm(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. +Minimum.Stock.Threshold..liters.kg. , data = pdata, index = c("Location", "Year"), model = "within")
+summary(fixed_effects_model_refined)
+pFtest(fixed_effects_model_refined,ols1_model)
+#Testul F arata ca modelul cu efecte fixe este semnificativ mai bun decat modelul OLS
+#Model cu efecte aleatorii
+random_effects_model <- plm(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold., data = pdata, index = c("Location", "Year"), model = "random")
+summary(random_effects_model)
+
+#Test hausman
+phtest(fixed_effects_model_refined, random_effects_model)
+#Nu avem suficiente dovezi pentru a respinge ipoteza nula, deci putem folosi modelul cu efecte aleatorii
+
+
+#Testarea efectelor fixe in timp
+# Model cu efecte fixe pentru an
+fixed_effects_year_model <- plm(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. + factor(Year), data = pdata, index = c("Location", "Year"), model = "within")
+summary(fixed_effects_year_model)
+pFtest(fixed_effects_year_model, fixed_effects_model_refined)
+#P-value > 0.05 =>  se recomanda folosirea modelului cu efecte fixe in timp
+# Testarea efectelor aleatorii cu Breusch-Pagan Lagrange Multiplier
+# Testul ne ajuta sa decidem intre RE si OLS 
+pool <- plm(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold., data = pdata, model = "pooling")
+summary(pool)
+
+plmtest(pool, type = c("bp"))
+#P-value > 0.05 =>  se recomanda folosirea modelului cu efecte aleatorii
+
+#Testarea dependentei transversale
+pcdtest(fixed_effects_model_refined, test = c("lm")) # p-value < 0.05 => exista dependenta transversala
+pcdtest(fixed_effects_model_refined, test = c("cd")) # p-value > 0.05 => nu exista dependenta transversala
+
+pbgtest(fixed_effects_model_refined) # p-value > 0.05 => nu avem autocorelare
+
+
+#Testam heteroschedasticitatea
+bptest(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. + factor(Location),data=pdata,studentize=FALSE)
+#P-value < 0.05 => exista heteroschedasticitate
+
+#Testarea efectelor random
+pFtest(random_effects_model,ols1_model)
+#P-value < 0.05 => se recomanda folosirea modelului cu efecte random
+
+pbgtest(random_effects_model) # p-value > 0.05 => nu avem autocorelare
+bptest(Approx..Total.Revenue.INR. ~ Quantity.Sold..liters.kg. + Price.per.Unit..sold. + factor(Year),data=pdata,studentize=FALSE)
+#P-value < 0.05 => exista heteroschedasticitate
